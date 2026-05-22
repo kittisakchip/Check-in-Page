@@ -3,11 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tencent Cloud Verification Gate</title>
+    <title>Local Testing Scanner Portal</title>
     <!-- Load Global Mobile Camera Scanning Module -->
     <script src="https://unpkg.com/html5-qrcode"></script>
-    <!-- Load Tencent Cloud COS Browser Engine Client -->
-    <script src="https://cdn.jsdelivr.net/npm/cos-js-sdk-v5/dist/cos-js-sdk-v5.min.js"></script>
     <style>
         body { font-family: -apple-system, sans-serif; background: #f5f6f9; text-align: center; margin: 0; padding: 20px; }
         #reader { width: 100%; max-width: 360px; margin: 20px auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
@@ -19,79 +17,44 @@
 </head>
 <body>
 
-    <h2>Staff Verification Gate</h2>
-    <p style="color: #666;">Align the attendee ticket QR code inside the viewfinder</p>
+    <h2>Local Testing Scanner Portal</h2>
+    <p style="color: #666;">Scan QR Code containing mock text strings "tkt001" or "tkt002"</p>
     
     <div id="reader"></div>
     <div id="log-box"></div>
 
     <script>
-        // 1. Establish Secure Connection Instance directly using Environment Variables
-        const cos = new COS({
-            SecretId: window.process?.env?.TENCENT_SECRET_ID || "/* Vercel auto-injects this */",
-            SecretKey: window.process?.env?.TENCENT_SECRET_KEY || "/* Vercel auto-injects this */"
-        });
+        // MOCK LOCAL DATABASE SHEET (Stored in memory for instant local testing)
+        let mockDatabase = [
+            { id: "tkt001", name: "Alice Zhang", checkedIn: false },
+            { id: "tkt002", name: "Bob Li", checkedIn: false }
+        ];
 
-        const config = {
-            Bucket: window.process?.env?.COS_BUCKET || "checkin-db-xxxx",
-            Region: window.process?.env?.COS_REGION || "ap-shanghai",
-            Key: 'guests.json'
-        };
-
-        // 2. Open Video Stream View Matrix
+        // Initialize and Open the Native Browser Video View Matrix
         const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 12, qrbox: 240 });
         html5QrcodeScanner.render(onScanSuccess);
 
-        // 3. Main Data Core Matching Engine
         function onScanSuccess(scannedTicketId) {
             const logBox = document.getElementById('log-box');
             logBox.style.display = "block";
             logBox.className = "neutral";
-            logBox.innerText = "Synchronizing data with Tencent Cloud...";
+            logBox.innerText = "Processing read value...";
 
-            // Pull current sheet file state from Tencent Cloud Storage
-            cos.getObject({
-                Bucket: config.Bucket,
-                Region: config.Region,
-                Key: config.Key
-            }, function(err, data) {
-                if (err) {
-                    logBox.className = "error";
-                    logBox.innerText = "❌ DATABASE LINK ERROR";
-                    return;
-                }
+            // Search the memory array block
+            let guest = mockDatabase.find(g => g.id === scannedTicketId.trim());
 
-                let dataObj = JSON.parse(data.Body);
-                let guestList = dataObj.guests;
-                let guest = guestList.find(g => g.id === scannedTicketId);
-
-                if (!guest) {
-                    logBox.className = "error";
-                    logBox.innerText = "❌ REJECTED: Fraudulent or unrecognized ticket identifier.";
-                } else if (guest.checkedIn) {
-                    logBox.className = "error";
-                    logBox.innerText = `⚠️ DUPLICATE ENTRY: ${guest.name} previously checked in.`;
-                } else {
-                    // Update value entry matrix mapping state locally
-                    guest.checkedIn = true;
-
-                    // Push the modified JSON structure straight back to Tencent COS
-                    cos.putObject({
-                        Bucket: config.Bucket,
-                        Region: config.Region,
-                        Key: config.Key,
-                        Body: JSON.stringify(dataObj)
-                    }, function(putErr) {
-                        if (putErr) {
-                            logBox.className = "error";
-                            logBox.innerText = "❌ WRITE LOCK FAILURE: Retrying sync...";
-                        } else {
-                            logBox.className = "success";
-                            logBox.innerText = `✓ ENTRY PASSED: Welcome, ${guest.name}!`;
-                        }
-                    });
-                }
-            });
+            if (!guest) {
+                logBox.className = "error";
+                logBox.innerText = `❌ REJECTED: Code "${scannedTicketId}" is not in the system.`;
+            } else if (guest.checkedIn) {
+                logBox.className = "error";
+                logBox.innerText = `⚠️ DUPLICATE ENTRY: ${guest.name} previously checked in.`;
+            } else {
+                // Update local memory state mapping value
+                guest.checkedIn = true;
+                logBox.className = "success";
+                logBox.innerText = `✓ ENTRY PASSED: Welcome, ${guest.name}!`;
+            }
         }
     </script>
 </body>
